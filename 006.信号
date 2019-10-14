@@ -1,0 +1,151 @@
+#### 一、blinker模块
+1.基本用法：`connect()`与`send()`方法对
+```
+from blinker import signal
+
+started = signal('test-started')
+
+def each(round):
+    print("Round {}!".format(round))
+    
+def round_two(round):
+    print("Only {}".format(round))
+    
+started.connect(each)    
+started.connect(round_two, sender=2)
+
+for i in range(1,5):
+    started.send(i)
+```
+- 创建命名信号：`signal()`
+- 定义待注册函数：`each()`，`round_two()`
+- 注册函数`Signal.connect()`，参数`sender`限制特定条件激活注册函数
+- 发送信号`Signal.send()`，其`send`的参数等于`sender`参数时才激活注册函数。
+
+
+2.修饰器注册函数：`@Signal.connect`
+``` 
+send_data = signal('send-data')
+
+@send_data.connect
+def receive_data(sender, **kw):
+    print("Caught signal from %r, data %r" % (sender, kw))
+    return 'received!'
+
+result = send_data.send('anonymous', abc=123)    
+```
+- 利用修饰器`@Signal.connect`注册函数
+- `Signal.send()`，额外的关键字参数将被传递给注册函数
+- `result`为被激活的函数及该函数返回值组成的元组
+
+输出显示：
+``` 
+Caught signal from 'anonymous', data {'abc': 123}
+```
+
+3.匿名信号:创建信号时的不必须传入名称字符串
+``` 
+class AltProcessor:
+    on_ready = signal()
+    on_complete = signal()
+    
+    def __init__(self, name):
+        self.name = name
+        
+    def go(self):
+        self.on_ready.send(self)
+        print('Alternate processing.')
+        self.on_complete.send(self)
+    
+    def __repr__(self):
+        return "<AltProcessor %s>" % self.name             
+```
+
+4.修饰器注册函数，限定`sender`参数:`Signal.connect_via('hello')`
+```
+@send_data.connect_via('hello')
+def receive_data(sender, **kw):
+    print("Caught signal from %r, data %r" % (sender, kw))
+    return 'received!'
+```
+
+5.检查信号是否有`connect`，或特定`sender`的`connect`
+``` 
+>>>bool(signal('ready').receivers)
+
+>>>signal('ready').has_receivers_for(processor_a)
+```
+
+
+#### 二、flask中内置的信号
+1.`flask.template_rendered`:模板渲染成功的是否发送
+```
+def log_template_renders(sender, template, context, **extra):
+    sender.logger.debug('Rendering template "%s" with context %s',
+                         template.name or 'string template,
+                         context)
+
+from flask import template_rendered
+template_rendered.connect(log_template_renders, app)                         
+```
+- 每当模板渲染成功，在日志中添加说明信息，包含模板及上下文信息
+
+2.`flask.request_started`:建立请求上下文后，在请求处理开始之前，订阅者可以用request之类的标准全局代理访问请求
+``` 
+def log_request(sender, **extra):
+    sender.logger.debug('Request context is set up')
+    
+from flask import request_started
+request_started.connect(log_request)    
+```
+
+3.`flask.request_finished`:在响应发送给客户端前发送，可以传递response
+```
+def log_response(sender,response, **extra):
+    sender.logger.debug('Request context is about to close down.Response:%s',
+                         response)
+                         
+from flask import request_finished
+request_finished.connect(log_response, app)                         
+```
+
+4.`flask.got_request_exception`:在请求处理中抛出异常时发送，异常本身会通过exception传递到订阅函数
+``` 
+def log_exception(sender, exception, **extra):
+    sender.logger.debug('Got exception during processing:%s', exception)
+
+from flask import got_request_exception
+got_request_exception.connect(log_exception, app)    
+```
+
+5.`flask.request_tearing_down`:在请求销毁时发送，即使发生异常也会被调用
+```
+def close_db_connection(sender, **extra):
+    session.close()
+    
+from flask import request_tearing_down
+request_tearing_down.connect(close_db_connection, app)    
+```
+
+6.`flask.appcontext_tearing_down`:在应用上下文销毁时发送，即使发生异常也会被调用
+``` 
+def close_db_connection(sender, **extra):
+    session.close()
+    
+from flask import appcontext_tearing_down
+appcontext_tearing_down.connect(close_db_connection, app)    
+```
+
+#### 三、Flask-Login中的信号
+1.`user_logged_in`用来记录用户的登录次数和登陆IP
+```
+@flask_login.user_logged_in.conncect_via(app)
+def track_logins(sender, user, **extra):
+    user.login_count += 1
+    user.last_login_ip = request.remote_addr
+    db.session.add(user)
+    db.session.commit()
+
+```
+
+

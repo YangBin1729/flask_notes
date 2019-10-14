@@ -1,0 +1,39 @@
+#### 上传文件
+1. 在待渲染的HTML中，带有`enctype=multipart/form-data`的`<form>`标记，标记中含有一个`<input type=file>`。
+
+`index.html`:
+```
+<form enctype="multipart/form-data">
+    <input type="file" name="file">
+    <input type="submit" value="Upload">
+</form>
+```
+
+2. 应用通过请求对象的 files 字典来访问文件。
+3. 使用文件的 save() 方法把文件 永久地保存在文件系统中。
+
+`app.py`:
+```
+app.config['UPLOAD_FOLDER']='uploads'
+
+@app.route('/',methods=['GET', 'POST'])
+def upload():
+    if request.method == 'POST':
+        ...
+        file = request.files['file']
+        file.save(os.path.join(UPLOAD_FOLDER, file.filename))   # 把上传文件保存在配置的uploads文件夹中
+        return redirect(url_for('uploaded_file', filename=filename))    # 跳转到显示刚上传的文件的链接
+    return render_template('index.html')
+```
+
+4. 使用flask的 send_from_directory 函数把保存的文件发送给客户端显示
+
+`app.py`:
+```
+@app.route('/uploaded_file/<filename>)
+def uploaded_file(filename):
+    return send_from_directory(app.config['UPLOAD_FOLDER'],filename)
+```
+
+
+5. todo：Flask_Uploads扩展

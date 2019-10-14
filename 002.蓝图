@@ -1,0 +1,42 @@
+#### 蓝图
+- 一定程度上的自组织的方式，作为应用的组件。表现得就像应用下的子应用一样。
+- 使用不同的蓝图来对应管理面板（admin panel），前端（front-end）和用户面板（user dashboard）。 
+- 可以按照组件组织视图、静态文件和模板，并在组件间共享模型、表单和你的应用的其他部分。
+
+1.基本用法
+
+- 如登陆视图 `views/auth.py`:
+```
+auth = Blueprint('auth',
+                 __name__,
+                 template_folder='templates',
+                 static_folder='static')
+```
+- 在应用中注册 `app.py`:
+``` 
+from flask import Flask
+from .views.auth import auth
+
+app = Flask(__name__)
+app.register_blueprint(auth)
+```
+
+2.使用动态的URL前缀
+
+- 如用户视图 `views/profile.py`:
+``` 
+from flask import Blueprint
+profile=Blueprint('profile',
+                  __name__,
+                  url_prefix='/<user_url_slag>')
+
+```
+- 也可在应用中注册时指定动态前缀 `app.py`:
+``` 
+from flask import Flask
+from .views.profile import profile
+
+app = Flask(__name__)
+app.register_blueprint(profile, url_prefix='/<user_url_salg>')
+```
+- 最好在注册的同时定义前缀，将前缀定义集中到顶级目录中

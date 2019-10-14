@@ -1,0 +1,107 @@
+
+#### 一、配置
+- Flask对象的config属性来操作配置的值，其实质是一个字典的子类，可以像字典一样操作。
+```
+app = Flask(__name__)
+app.config['TESTING']=True
+```
+- 只有全部是**大写字母**的变量才会被配置对象所使用
+
+1.添加`config.py`文件中的配置：`.from_object()`方法
+
+`config.py`:
+``` 
+class Config():
+    DEBUG = True
+    SECRET_KEY = "you can guess"
+    ...
+```
+`app.py`:
+``` 
+from config import Config
+...
+app.config.from_object(Config)
+
+```
+
+2.不公开的配置及文件放置于instance文件夹,通过`.from_pyfile()`方法导入
+
+- 需要定义一些不能为人所知的配置变量，如数据库密码和API密钥，或定义特定于当前机器的参数。
+    - 可以把它们从config.py中的其他变量中分离出来，并保持在版本控制之外
+
+- `Flask.instance_path`默认为`instance`文件夹，`./instance/config.py`
+``` 
+from config import Config
+
+app = FLASK(__name__, instance_relative_config=True)
+app.config.from_object(Config)
+app.config.from_pyfile('config.py')
+```
+
+- 或者显式的提供实例文件夹的路径,必须是绝对路径
+```
+app = Flask(__name__, instance_path="/path/to/instance/folder")
+```
+- 如果生产环境和开发环境之间的差别非常小，可以使用instance文件夹抹平配置上的差别。
+    - 只需要在`app.config.from_object()`之后才调用`app.config.from_pyfile()`,在`instance/config.py`中定义的变量可以覆盖在`config.py`中设定的值。 
+
+- 通过 Flask.instance_path 可以找到实例文件夹的路径。Flask 还提供一个打开实例文件夹中的文件的快捷方法： Flask.open_instance_resource() 。
+``` 
+with app.open_instance_resource('application.cfg') as f:
+    config = f.read()
+```
+
+3.依据环境变量来配置:`.from_envvar()`方法
+- 在shell中设置环境变量,在代码中访问：
+
+`shell`:
+```
+(venv)D:\projects> set DEBUG=False
+(venv)D:\projects> set SECRET_KEY='5f352379324c22463451387a0aec5d2f'
+```
+`app.py`:
+``` 
+DEBUG = os.environ.get("DEBUG", default=False)
+SECRET_KEY = os.environ.get("DEBUG")
+```
+- 或者shell设定环境变量`APP_CONFIG_FILE`指向的配置文件(实质是python文件)的绝对路径
+
+`shell`:
+```
+(venv)D:\projects> set APP_CONFIG_FILE = abs/path/to/your/config.py
+```
+`app.py`:
+```
+app.config.from_envvar('APP_CONFIG_FILE')
+```
+
+
+
+4.完整应用的结构
+``` 
+requirements.txt
+run.py
+config/
+    __init__.py  
+    default.py
+    production.py
+    development.py
+    staging.py
+instance/
+    config.py
+yourapp/
+    __init__.py
+    models.py
+    views.py
+    static/
+        javascript.js
+    templates/  
+        index.html
+```
+
+|文件名|内容|
+|:---:|:---:|
+|config/default.py|默认值，适用于所有的环境或交由具体环境进行覆盖。例如，在config/default.py中设置DEBUG = False，在config/development.py中设置DEBUG = True。|
+|config/development.py |	在开发环境中用到的值。这里你可以设定在localhost中用到的数据库URI链接。
+|config/production.py 	|在生产环境中用到的值。这里你可以设定数据库服务器的URI链接，而不是开发环境下的本地数据库URI链接。
+|config/staging.py |	在你的开发过程中，你可能需要在一个模拟生产环境的服务器上测试你的应用。你也许会使用不一样的数据库，想要为稳定版本的应用替换掉一些配置。

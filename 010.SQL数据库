@@ -1,0 +1,390 @@
+#### SQLite
+
+1. SQL数据库把数据储存在表(Table)中，表模拟程序中不同的实体。如订单管理程序的数据库中可能有表customers、products和orders
+
+2. 表的列表示实体的数据属性，行定义各列对应的真实数据，列是固定的。特殊的列，称为主键，为表中各行的唯一的标识符。
+
+3. 表是存放数据库中关系数据的集合，一个数据库通常包含多个表，表与表之间通常通过外键关联。表中外键的列，引用同一个表或不同表中某行的主键。行之间的这种联系称为关系
+
+4. 基本操作： 
+   - 操作关系数据库，需先连接到数据库，称为Connection
+   - 连接到数据库之后，需要打开游标Cursor，通过Cursor执行SQL语句
+   - 使用Cursor对象执行insert，update，delete语句时，执行结果由rowcount返回影响的行数，就可以拿到执行结果。
+   - 使用Cursor对象执行select语句时，通过featchall()可以拿到结果集。结果集是一个list，每个元素都是一个tuple，对应一行记录。
+   - 如果SQL语句带有参数，那么需要把参数按照位置传递给execute()方法，有几个?占位符就必须对应几个参数
+   - 要确保打开的Connection对象和Cursor对象都正确地被关闭
+
+- 连接到SQLite数据库;数据库文件是test.db;如果文件不存在，会自动在当前目录创建:
+```
+conn = sqlite3.connect('test.db')
+```
+- 创建一个Cursor:
+```
+cursor = conn.cursor()
+```
+
+- 执行一条SQL语句，创建user表:
+```
+cursor.execute('create table user (id varchar(20) primary key, name varchar(20))')
+```
+
+- 继续执行一条SQL语句，插入一条记录:
+```
+cursor.execute('insert into user (id, name) values (\'1\', \'Michael\')')
+```
+
+- 通过rowcount获得插入的行数:
+```
+print('rowcount =', cursor.rowcount)
+```
+
+- 关闭Cursor:
+```
+cursor.close()
+```
+
+- 提交事务:
+```
+conn.commit()
+```
+
+- 关闭Connection:
+```
+conn.close()
+```
+
+- 查询记录：
+```
+conn = sqlite3.connect('test.db')
+cursor = conn.cursor()
+```
+
+- 执行查询语句:
+```
+cursor.execute('select * from user where id=?', '1')
+```
+
+- 获得查询结果集:
+```
+values = cursor.fetchall()
+print(values)
+cursor.close()
+conn.close()
+```
+
+
+
+
+#### python中mysql的使用
+#### 一、mysql使用
+1. 需安装软件，安装成功后，进入MySQL Command Line Client，输入密码
+
+```
+#  mysql -uroot
+```
+
+2. 查看所有数据库
+```
+mysql> show databases;      # 句尾的分号必须有
++--------------------+
+| Database           |
++--------------------+
+| information_schema |
+| mysql              |
+| performance_schema |
+| sakila             |
+| test               |
+| world              |
++--------------------+
+```
+**说明**：mysql描述用户访问权限、test用来试验的工作区
+
+
+3. 选择mysql数据库
+```
+mysql>  use mysql;
+Database changed
+```
+**说明**：use语句句尾不强制需要分号，但必须单行
+
+4. 查看所有表，其中user用来存放用户名、密码、账户权限等信息
+```
+mysql> show tables;
++---------------------------+
+| Tables_in_mysql           |
++---------------------------+
+| columns_priv              |
+| db                        |
+| event                     |
+| func                      |
+| ...      |
+| time_zone_transition_type |
+| user                      |
++---------------------------+
+```
+
+6. 查看用户信息
+```
+mysql> select user,host,password from user
++------+-----------+-------------------------------------------+
+| user | host      | password                                  |
++------+-----------+-------------------------------------------+
+| root | localhost | *BD51D60E2A211E2C31370563807DF6C806655458 |
+| root | 127.0.0.1 | *BD51D60E2A211E2C31370563807DF6C806655458 |
+| root | ::1       | *BD51D60E2A211E2C31370563807DF6C806655458 |
+|      | localhost |                                           |
++------+-----------+-------------------------------------------+
+```
+
+7. 更改密码：
+```
+mysql> update user set password=password('123456') where user='root' and host='localhost';
+```
+
+8. 创建数据库并选择
+```
+mysql> CREATE DATABASE test-db;
+mysql> USE test-db
+```
+或者从命令行获取数据库：
+```
+shell> mysql -h host -u user -p test-db
+Enter password:******
+```
+查看选择的数据库：
+```
+mysql> SELECT DATABASE();
+```
+
+
+#### 二、Flask-SQLAlchemy管理 mysql
+1. MySQL的URL格式:`mysql+pymysql://usename:password@hostname/database-name`
+```
+app.config['SQLALCHEMY_DATABASE_URI'] = 'mysql+pymysql://root:123456@127.0.0.1:3306/test_db'
+```
+**说明**：
+- 驱动默认为pymysql,需安装;
+- 用户名root；密码123456；需要经过MySQL Command Line Client中验证通过的
+- 域名127.0.0.1；端口默认为3306；
+- 数据库名称为test_db，需要在MySQL Command Line Client中已经创建存在的数据库
+
+
+#### 三、创建表
+##### 1.方法一：**将待创建表的SQL命令保存在文件中，运行文件**
+
+- 储存创建空表的SQL命令的文件 `app/schema.sql`:
+```
+DROP TABLE IF EXISTS user;
+DROP TABLE IF EXISTS post;
+
+CREATE TABLE user (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  username TEXT UNIQUE NOT NULL,
+  password TEXT NOT NULL
+);
+
+CREATE TABLE post (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  author_id INTEGER NOT NULL,
+  created TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  title TEXT NOT NULL,
+  body TEXT NOT NULL,
+  FOREIGN KEY (author_id) REFERENCES user (id)
+);
+```
+
+- 执行该文件 `app/db.py`
+```
+def init_db():
+    db = get_db()           # 获取数据库连接
+    with current_app.open_resource('schema.sql') as f:
+        db.executescript(f.read().decode('utf-8'))
+```
+
+##### 2.方法二：以`db.Model` 为基类创建表类，优点是通过表的类方法实现很多相关功能，如验证密码等！
+
+- 以 `db.Model` 为基类，创建模型 `app/models.py`
+```
+class User(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    email = db.Column(db.String(64), unique=True, index=True)
+    username = db.Column(db.String(64), unique=True, index=True)
+    ...
+
+class Post(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    body = db.Column(db.Text)
+    ...
+```
+
+- 命令行中创建表
+```
+(venv)> flask shell
+>>> from app import db
+>>> db.create_all()
+```
+
+
+#### sqlalchemy
+```
+from sqlalchemy import Column, String, create_engine
+from sqlalchemy.orm import sessionmaker
+from sqlalchemy.ext.declarative import declarative_base
+```
+
+- 创建表对象的基类:
+```
+Base = declarative_base()
+```
+
+- 定义User对象:
+```
+class User(Base):
+    # 表的名字:
+    __tablename__ = 'user'
+
+    # 表的结构:
+    id = Column(String(20), primary_key=True)
+    name = Column(String(20))
+```
+
+- 初始化数据库连接:
+```
+engine = create_engine('mysql+mysqlconnector://root:password@localhost:3306/test')
+```
+
+- 创建DBSession类型:
+```
+DBSession = sessionmaker(bind=engine)
+```
+
+- 创建session对象:
+```
+session = DBSession()
+```
+
+- 创建新User对象:
+```
+new_user = User(id='5', name='Bob')
+```
+
+- 添加到session:
+```
+session.add(new_user)
+```
+
+- 提交即保存到数据库:
+```
+session.commit()
+```
+
+- 关闭session:
+```
+session.close()
+```
+
+- 创建Session:
+```
+session = DBSession()
+```
+
+
+- 创建Query查询，filter是where条件，最后调用one()返回唯一行，如果调用all()则返回所有行:
+```
+user = session.query(User).filter(User.id=='5').one()
+```
+
+- 打印类型和对象的name属性:
+```
+print('type:', type(user))
+print('name:', user.name)
+```
+
+- 关闭Session:
+```
+session.close()
+```
+
+#### flask-sqlalchemy
+- ORM技术：Object-Relational Mapping，把关系数据库的表结构映射到对象上
+- 表中每一列为一个对象属性，每一行为对象实例
+
+- 配置数据库
+``` 
+basedir = os.path.abspath(os.path.dirname(__file__))
+app.config['SQLALCHEMY_DATABASE_URI'] ='sqlite:///' + os.path.join(basedir, 'data.sqlite')
+app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
+db=SQLAlchemy(app)
+```
+- 模型定义
+```
+class Role(db.Model):
+    __tablename__ = 'roles'                             # 表名，无定义时默认为类名的小写，即role
+    id = db.Column(db.Integer, primary_key=True)
+    name = db.Column(db.String(64), unique=True)
+    users = db.relationship('User', backref='role')     # 定义了关系的面向对象视角，该属性将返回与角色相关联的User对象组成的列表
+                                                        # backref参数给User对象添加了一个role属性，返回一个Role对象
+
+class User(db.Model):
+    __tablename__ = 'users'
+    id = db.Column(db.Integer, primary_key=True)
+    username = db.Column(db.String(64), primary_kry=True)
+    role_id = db.Clolumn(db.Integer, db.ForeignKey('roles.id'))     # 该属性的值为Role对象的id属性
+```
+- 创建表：在 flask shell命令行中进行操作，`db.create_all()`定位db.Model的所有子类，并在数据库中创建相应的表格
+
+
+- 设置如下配置，终端中会打印出原始的数据库操作命令
+SQLAlCHEMY_ECHO = True
+
+#### 用到多种数据库时
+
+- 配置 SQLALchemy 来支持多个 binds；如果模型没有指定特定的绑定时，使用默认连接（`SQLALCHEMY_DATABASE_URI` 配置）
+- 配置默认数据库，及另两个名为 ‘users’ 和 ‘appmeta’ 的数据库
+
+```python
+SQLALCHEMY_DATABASE_URI = 'postgres://localhost/main'
+SQLALCHEMY_BINDS = {
+    'users':        'mysqldb://localhost/users',
+    'appmeta':      'sqlite:////path/to/appmeta.db'
+}
+```
+
+- 创建和删除表：
+
+  - [`create_all()`](http://www.pythondoc.com/flask-sqlalchemy/api.html#flask.ext.sqlalchemy.SQLAlchemy.create_all) 和 [`drop_all()`](http://www.pythondoc.com/flask-sqlalchemy/api.html#flask.ext.sqlalchemy.SQLAlchemy.drop_all) 方法默认作用于所有声明的绑定(bind)，包括默认的。
+  - 提供 `bind` 参数来指定操作的数据库，其值可以是单个的数据库名、名称列表、或 `__all__`
+  - 默认的  `bind` 值为 None，默认的数据库
+
+  ```shell
+  >>> db.create_all()
+  >>> db.create_all(bind=['users'])
+  >>> db.create_all(bind='appmeta')
+  >>> db.drop_all(bind=None)
+  ```
+
+- 声明模型时，用 [`__bind_key__`](http://www.pythondoc.com/flask-sqlalchemy/api.html#flask.ext.sqlalchemy.Model.__bind_key__) 属性指定绑定：
+
+```python
+class User(db.Model):
+    __bind_key__ = 'users'
+    id = db.Column(db.Integer, primary_key=True)
+    username = db.Column(db.String(80), unique=True)
+```
+
+- 直接创建表对象时，`info` 字典参数:
+
+```python
+user_favorites = db.Table('user_favorites',
+    db.Column('user_id', db.Integer, db.ForeignKey('user.id')),
+    db.Column('message_id', db.Integer, db.ForeignKey('message.id')),
+    info={'bind_key': 'users'}
+)
+```
+
+
+
+
+
+
+

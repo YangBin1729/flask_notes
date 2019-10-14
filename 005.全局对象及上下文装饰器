@@ -1,0 +1,84 @@
+#### 全局变量
+1. current_app **程序上下文(Application Context)**，当前激活程序的程序实例
+2. g **程序上下文**，处理请求时用作临时储存的对象。
+   - Global(g)是一个线程安全的命名空间。每次请求开始，会新建一个global对象；请求结束时，销毁这个对象
+   - 可用来保存User对象，或任何需要在视图、模板，或函数间共享的数据
+
+
+- 例如：请求之前加载登陆用户
+```
+@app.before_app_request
+def load_logged_in_user():
+    user_id = session.get('user_id')
+
+    if user_id is None:
+        g.user = None
+    else:
+        g.user = get_db().execute(
+            'SELECT * FROM user WHERE id = ?', (user_id,)
+        ).fetchone()
+```
+
+
+- 例如：登陆要求
+```
+def login_required(view):
+    @functools.wraps(view)
+    def wrapped_view(**kwargs):
+        if g.user is None:
+            return redirect(url_for('auth.login'))
+        return view(**kwargs)
+    return wrapped_view
+```
+
+
+- 例如：模板中登录用户下有新建选项
+```html
+{% if g.user %}
+<a class="action" href="{{ url_for('blog.create') }}">New</a>
+{% endif %}
+```
+
+1. request **请求上下文(Request Context)**，请求对象，封装了客户端发出的HTTP请求中的内容
+    - 当WSGI处理一个请求时，Flask创造一个request上下文对象，包含request本身的信息，如HTTP headers, URI arguments, URL path,WSGI environment
+    - 该对象被推入一个包含其他重要信息，如app\g\session和flash消息的堆栈
+    - 使用@app.before_request和g对象来给request上下文添加信息
+
+2. session **请求上下文**，用户会话，用于储存请求之间需要“记住”的值的字典
+    - 为了实现sessions，Flask使用signed cookies,通过配置的SECRET_KEY来应用默认的HMAC_SHA1加密算法。
+
+
+- 例如：登陆后，会保存用户的id
+```
+@app.route('/login', methods=['GET', 'POST'])
+def login():
+    if request.method == 'POST':
+        username = request.form['username']
+        db = get_db()
+        user = db.execute(
+            'SELECT * FROM user WHERE username = ?', (username,)
+        ).fetchone()
+         # ...
+        session.clear()
+        session['user_id'] = user['id']
+        return redirect(url_for('index'))
+    return render_template('auth/login.html')
+```
+
+
+- 例如：登出后，即清除session对象：
+```
+@app.route('/logout')
+def logout():
+    session.clear()
+    return redirect(url_for('index'))
+```
+
+#### 上下文装饰器
+
+- `@app.before_request`，被其修饰的函数会在请求处理之前被调用
+
+- `@app.after_request`，被其装饰的函数只会在请求正常退出时调用，它必须传入一个参数来接受响应对象，并返回一个响应对象，一般用来统一修改响应的内容。
+
+- `@app.teardown_request`，在任何情况下都会被调用，它必须传入一个参数来接受异常对象，一般用来统一释放请求所占有的资源。
+

@@ -1,0 +1,53 @@
+1.初始化扩展Flask-PageDown
+```
+from flask_pagedown import PageDown
+pagedown = PageDown()
+def create_app(config_name):
+    ...
+    pagedown.init_app(app)
+```
+
+2.使用PageDownField富文本表单
+```
+from flask_pagedown import PageDownField
+class PostForm(FlaskForm):
+    body = PageDownField("What's on your mind?", validators=[DataRequired()])
+    submit = SubmitField('Submit')
+```
+
+3.Markdown预览在模板中的实现：
+
+```
+{% block scripts %}
+{{ super() }}
+{{ pagedown.incllude_pagedown() }}
+{% endblock %}
+```
+
+4.页面上输入的是带一些特定的标签的文本(如表示标题的#），预览时转换成HTML代码，直接提交有安全隐患。
+- 安全起见，只提交纯文本，在服务器上将其转换成HTML。再使用Bleach进行清理，确保只包含特定的标签
+
+```
+from markdown import markdown
+import bleach
+class Post(db.Model):
+    ...
+    body_html = db.Column(db.Text)
+    ...
+    @staticmethod
+    def on_changed_body(target, value, oldvalue, initiator):
+        allowed_tags = ['a', 'abbr', 'acronym', 'b', 'blockquote', 'code', 'em', 'i', 'li',
+                        'ol', 'pre', 'strong', 'ul','h1', 'h2', 'h3', 'p']
+        target.body_html = bleach.linkify(
+            bleach.clean(markdown(value, output_html='html'),
+                         tags=allowed_tags,
+                         strip=True)
+        )
+
+db.event.listen(Post.body, 'set', Post.on_changed_body)
+```
+
+- markdown把文本转换成HTML，然后clean()函数删除不在白名单中的标签。
+- 最后linkify()函数将文本中的链接转换成<a>标签。因为Markdown未提供链接的支持
+- on_changed_body函数注册在body字段上，是SQLAlchemy“set"事件的监听程序，只要这个类实例的body字段新设了值，函数就会自动被调用
+

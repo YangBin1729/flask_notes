@@ -1,0 +1,123 @@
+### 表单
+一、模板中实现
+
+1. 在模板HTML文件中，使用`<form></form>`标签,如简单的登陆界面：
+```html
+<form method="post">
+<label for="username">Username</label>
+<input name="username" id="username" required>
+<label for="password">Password</label>
+<input type="password" name="password" id="password" required>
+<input type="submit" value="Log In">
+</form>
+```
+
+2. 在视图函数中，利用`Request`对象处理提交的表单,如：
+    - `request.method`为'POST'时，获取表单项提交的值。
+```
+if request.method == 'POST':
+    username = request.form['username']
+    password = request.form['password']
+```
+
+
+
+二、利用`FLASK_WTF，wtforms`模块封装
+
+- CSRF全称是cross site request forgery，跨站请求伪造.CSRF通过第三方伪造表单数据，post到应用服务器上,受害服务器以为这些数据来自于它自己的网站.
+- 创建表单类时，CSRF 令牌的隐藏字段是自动创建
+- 在 HTML 中渲染时，**是必须手动创建的**，否则表单无法 POST。
+
+0.设置 `  SECRET_KEY`:
+``` 
+app.config['SECRET_KEY']='hard to guess string'
+```
+
+1.首先以FlaskForm为基类，定义各种表单类：
+   - validators验证数据。
+   - 输入参数`render_kw`定制字段属性，如`render_kw={"rows": 5，"placeholder": "hello"}`，此时行高为5，占位符为“hello”
+   - 
+```
+class LoginForm(FlaskForm):
+    username = StringField('User_name', validators=[DataRequired(),
+                                         Length(1, 64),])
+    password = PasswordField('Password', validators=[DataRequired()])
+    submit = SubmitField('Log In')
+```
+
+
+2.在视图函数中使用表单：
+   - 表单类的`validate_on_submit()`方法确认是否提交.
+   - 该方法会利用validators自动检查所有字段,错误信息会保存在form.username.errors列表中
+```
+form = LoginForm()
+if form.validate_on_submit():
+    username = form.username.data
+    ...
+```    
+
+
+
+3.把表单渲染成HTML，表单类实例传入模板：
+   - Flask-wtf中`form.hidden_tag()` 模板参数将被替换为一个隐藏字段，用来实现在配置中激活了的 CSRF 保护。
+   - **该语句为必须**，否则无法提交！！！！或直接使用WTForms方法`{{ form.csrf_token }}`
+   - 没有该语句时，会出现一个 `CSRF Token`的标签
+   
+```
+<form method="POST">
+    {{ form.hidden_tag() }}<br>
+    {{ form.username.label }}{{ form.username(id='my_text_field') }}<br>
+    {% for error in form.username.errors %}
+    <span style="color:red">{{ error }}</span>
+    {% endfor %}<br>
+    {{ form.submit() }}
+</form>
+```
+
+   - form.username() 即为 username 这个输入框元素
+   - form.username.label 为 username 这个字段的标签字符串，即`<label>User_name</label>`
+   - form.username.label.text 为字符串`User_name`
+   - form.username.id 即为 字段被赋值的变量名`username`
+   - form.username.type 为username字段的类型，如 StringField
+   - 对 form 使用for 循环处理每一个字段
+   
+```
+{% for field in form %}
+<tr>
+    <th>{{ field.label }} {% if field.flags.required %}*{% endif %}</th>
+    <td>{{ field }}</td>
+</tr>
+{% endfor %}
+```
+
+4.或者使用Flask-Bootstrap渲染表单,在模板中：
+   - 其中"bootstrap/wtf.html"模板位于Flask-Bootstrapd的安装目录的templates文件夹中
+   - quick_form宏中输入`form_type="basic",horizontal_columns=('sm', 2, 10)`，
+表单会水平显示，即标签在输入框左侧。默认形式时标签在输入框上方
+```
+{% import "bootstrap/wtf.html" as wtf %}
+{{ wtf.quick_form(form) }}
+```
+
+
+
+5.CSRF保护
+
+```
+from flask_wtf.csrf import CSRFProtect
+csrf = CSRFProtect(app)
+```
+- 或延迟注册
+``` 
+csrf = CSRFProtect()
+
+def create_app():
+    app = Flask(__name__)
+    csrf.init_app(app)
+```
+- 渲染表单：
+``` 
+<form method="post">
+    {{ form.csrf_token }}
+</form>
+```

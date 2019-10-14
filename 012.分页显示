@@ -1,0 +1,54 @@
+#### Flask-SQLAlchemy的paginate()方法
+- 第一个参数定义了当前页码， 第二个参数为每页显示的条目个数， 返回一个Pagination对象，而不是first()和all()方法返回Post实例对象列表
+```
+@main.route('/', methods=['GET', 'POST'])
+def index():
+    ...
+    page = request.args.get('page', 1, type=int)
+    pagination = Post.query.order_by(
+            Post.timestamp.desc()
+                 ).paginate(
+            page,
+            per_page=current_app.config['FLASKY_POSTS_PER_PAGE'],
+            error_out=False)
+    posts = pagination.items
+    return render_template('index.html', 
+                            form=form, 
+                            posts=posts, 
+                            pagination=pagination)
+```
+
+- 模板中添加分页导航:
+
+`index.html`:
+```
+{% macro pagination_widget(pagination, endpoint) %}
+<ul class="pagination">
+    <li{% if not pagination.has_prev %} class="disabled"{% endif %}>
+        <a href="{% if pagination.has_prev %}{{ url_for(endpoint, page=pagination.prev_num, **kwargs) }}{% else %}#{% endif %}">
+            &laquo;
+        </a>
+    </li>
+    {% for p in pagination.iter_pages() %}
+        {% if p %}
+            {% if p == pagination.page %}
+            <li class="active">
+                <a href="{{ url_for(endpoint, page = p, **kwargs) }}">{{ p }}</a>
+            </li>
+            {% else %}
+            <li>
+                <a href="{{ url_for(endpoint, page = p, **kwargs) }}">{{ p }}</a>
+            </li>
+            {% endif %}
+        {% else %}
+        <li class="disabled"><a href="#">&hellip;</a></li>
+        {% endif %}
+    {% endfor %}
+    <li{% if not pagination.has_next %} class="disabled"{% endif %}>
+        <a href="{% if pagination.has_next %}{{ url_for(endpoint, page=pagination.next_num, **kwargs) }}{% else %}#{% endif %}">
+            &raquo;
+        </a>
+    </li>
+</ul>
+{% endmacro %}
+```

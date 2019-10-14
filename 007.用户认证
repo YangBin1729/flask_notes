@@ -1,0 +1,257 @@
+#### 简单验证密码
+1.验证密码
+````
+from werkzeug.security import generate_password_hash, check_password_hash
+class User(db.Model):
+    # ...
+    password_hash = db.Column(db.String(128))
+
+    @property
+    def password(self):
+        raise AttributeError('password is not a readable attribute')
+    @password.setter
+    def password(self, password):
+        self.password = generate_password_hash(password)
+
+    def verify_password(self, password):
+        return check_password_hash(self.password_hash, password)
+````
+
+
+#### 使用Flask-Login认证用户
+
+1. Flask-Login要求实现的用户方法：is_authenticated, is_active, is_anonymous, get_id();
+2. 通过UserMixin类，包含这些方法的默认实现
+```
+from flask_login import UserMixin
+class User(UserMixin, db.Model):
+    ...
+```
+
+2. 初始化
+```
+from flask_login import LoginManager
+
+login_manager = LoginManager()
+login_manager.login_view = 'auth.login' # 指定登陆页面端点
+
+def create_app(config_name):
+    ...
+    login_manager.init_app(app)
+```
+
+3. Flask-Login要求程序实现一个回调函数，使用指定的标识符加载用户
+```
+@login_manager.user_loader
+def load_user(user_id): # 用于当需要时获取登陆用户信息
+    return User.query.get(int(user_id))
+```
+
+4. 保护路由:未认证的用户访问该路由，Flask-Login会拦截请求，把用户发往登陆页面
+```
+from flask_login import login_required
+@app.route('/')
+@login_required
+def index():
+    return 'Only authenticated users are allowed!'
+```
+
+5. 登陆模板：current_user由Flask-Login提供，在视图函数和模板中自动可用，包含登陆用户或匿名用户代理
+```html
+{% if current_user.is_authenticated %}
+<li>Log In</li>
+{% else %}
+<li>Log Out</li>
+{% endif %}
+```
+
+6. 登入用户，验证用户、密码通过后，激活login_user()函数把该函数记录为已登陆对象
+```
+@auth.route('/login', methods=['GET', 'POST'])
+def login():
+    form = LoginForm()
+    if form.validate_on_submit():
+        user = User.query.filter_by(email=form.email.data).first()
+        if user is not None and user.verify_password(form.password.data):
+            login_user(user, form.remember_me.data)
+            next = request.args.get('next')
+            if next is None or not next.startswith('/'):
+                next = url_for('main.index')
+            return redirect(next)
+        flash('Invalid username or password.')
+    return render_template('auth/login.html', form=form)
+```
+
+
+7. 登出用户,调用logout_user函数删除并重设user session
+```
+from flask_login import logout_user
+@auth.route(logout)
+@login_required
+def logout():
+    logout_user()
+    flash('You have been logged out.')
+    return redirect(url_for('main.index'))
+```
+
+
+8. 注册新用户
+- 注册表单
+```
+class RegistrationForm(FlaskForm):
+    email = StringField('Email', validators=[DataRequired(), Length(1, 64),
+                                             Email()])
+    username = StringField('Username', validators=[
+        DataRequired(), Length(1, 64),
+        Regexp('^[A-Za-z][A-Za-z0-9_.]*$', 0,
+               'Usernames must have only letters, numbers, dots or '
+               'underscores')])
+    password = PasswordField('Password', validators=[
+        DataRequired(), EqualTo('password2', message='Passwords must match.')])
+    password2 = PasswordField('Confirm password', validators=[DataRequired()])
+    submit = SubmitField('Register')
+
+    def validate_email(self, field):
+        if User.query.filter_by(email=field.data).first():
+            raise ValidationError('Email already registered.')
+
+    def validate_username(self, field):
+        if User.query.filter_by(username=field.data).first():
+            raise ValidationError('Username already in use.')
+```
++ 任何以validate_加上字段名的方法，和常规的验证函数一起调用
+
++ 注册路由
+```
+@auth.route('/register', methods=['GET', 'POST'])
+def register():
+    form = RegistrationForm()
+    if form.validate_on_submit():
+        user = User(email=form.email.data,
+                    username=form.username.data,
+                    password=form.password.data)
+        db.session.add(user)
+        db.session.commit()
+        flash('You can now login.')
+        return redirect(url_for('auth.login'))
+    return render_template('auth/register.html', form=form)
+```
+
+9. 确认账户
+- 使用itsdangerous生成确认令牌
+```
+from itsdangerous import TimedJSONWebSignatureSerializer as Serializer
+class User(UserMixin, db.Model):
+    ...
+    confirmed = db.Column(db.Boolean, default=False)
+
+    def generate_confirmation_token(self, expiration=3600):
+        s = Serializer(current_app.config['SECRET KEY'], expiration)
+        return s.dumps({'confirm': seld.id}).decode('utf-8')
+
+    def confirm(self, token):
+        s = Serializer(current_app.config['SECRET_KEY'])
+        try:
+            data = s.loads(token.encode('utf-8'))
+        except:
+            return False
+        if data.get('confirm') != self.id:
+            return False
+        self.confirmed = True
+        db.session.add(self)
+        return True
+```
+        
+- 发送确认邮件：
+```
+@auth.route('/register', methods=['GET', 'POST'])
+def register():
+    form = RegistrationForm()
+    if form.validate_on_submit():
+        # ...
+        db.session.add(user)
+        db.session.commit()
+        token = user.generate_confirmation_token()
+        send_email(user.email, 'Confirm Your Account', 'auth/email/confirm', user=user, token=token)
+        flash('A confirmation email has been sent to you by email.')
+        return redirect(url_for('main.index'))
+    return render_template('auth/register.html', form=form)
+```
+    
+- 发送邮件内容templates/auth/email/confirm.txt：send_email函数传入了user、token参数
+
+```text
+Dear {{ user.username }},
+Welcome to Flasky!
+To confirm your account please click on the following link:
+{{ url_for('auth.confirm', token=token, _external=True) }}
+```
+
+- 用户确认账户
+```
+@auth.route('/confirm/<token>')
+@login_required
+def confirm(token):
+    if current_user.confirmed:
+        return redirect(url_for('main.index'))
+    if current_user.confirm(token):
+        db.session.commit()
+        flash('You have confirmed your account. Thanks!')
+    else:
+        flash('The confirmation link is invalid or has expired.')
+    return redirect(url_for('main.index'))
+```
+    
+- 处理未确认账户
+```
+@auth.before_app_request
+def before_request():
+    if current_user.is_authenticated \
+            and not current_user.confirmed \
+            and request.blueprint != 'auth' \
+            and request.endpoint != 'static':
+        return redirect(url_for('auth.unconfirmed'))
+
+@auth.route('/unconfirmed')
+def unconfirmed():
+    if current_user.is_anonymous or current_user.confirmed:
+        return redirect(url_for('main.index'))
+    return render_template('auth/unconfirmed.html')
+```
+    
+- 重新发送确认邮件：
+```
+@auth.route('/confirm')
+@login_required
+def resend_confirmation():
+    token = current_user.generate_confirmation_token()
+    send_email(current_user.email, 'Confirm Your Account',
+               'auth/email/confirm', user=current_user, token=token)
+    flash('A new confirmation email has been sent to you by email.')
+    return redirect(url_for('main.index'))
+```
+
+
+#### 常用认证方法
+- 基本认证，由HTTP协议本身实现
+   - 用户向服务器请求受保护内容——服务器回应401（未授权），和HTTP头WWW-Authenticate:Basic realm="Login required".——浏览器弹出登陆窗口——用户提供账号、密码（base64编码）
+   - 简单，但并不安全和高效，每次请求都会发送用户名和密码到服务器
+```
+def authenticate(username,password):
+  return username=='admin' and password=='password'
+@app.route('/basic-auth-page)
+def basic_auth_page():
+  auth=request.authorization
+  if not auth or not authenticate(auth.username,auth.password):
+      return Response('Login with username/password', 401,{'WWW-Authenticate':'Basic realm="Login required".'}）
+  return render_template('some_page.html')
+```            
+   
+
+- 远程用户认证：
+   - 用户在域名中(Active Directory)中经过了认证，web服务器只检查有户名是否存在于数据库中，而不需要密码
+   - 网站服务器将认证后的用户名作为环境变量传递给WSGI
+```
+username=request.environ.get('REMOTE_USER')
+```
+- LDAP(lightweight directory access protocol)认证

@@ -1,0 +1,26 @@
+- 设置Cookie
+```
+    response = make_response(render_template('home.html',
+                                             articles=articles,
+                                             weather=weather,
+                                             rate=rate))
+    expires = datetime.datetime.now() + datetime.timedelta(days=365)
+    response.set_cookie("publication", publication, expires=expires)
+    response.set_cookie("city", city, expires=expires)
+return response
+```
+
+               
+- 获取Cookie
+```
+publication = request.args.get("publication")
+if not publication:
+    publication = request.cookies.get("publication")
+    if not publication:
+        publication = DEFAULTS["publication"]
+```
+
+- 浏览器里开发者工具-储存-右侧栏Cookie里会看到设置的 ’publication‘ 属性
+
+
+- 控制台里JavaScript `let x=document.cookie`，会得到cookie字符串，类似`"locale=en_US;location=nowhere，...city=wuhan"`的形式   

@@ -1,0 +1,139 @@
+#### NoSQL数据库-Redis
+1.使用redis时，需先另开终端，cd到redis安装目录，先运行`redis-server`命令，启动**服务器**
+```
+D:\Program Files\Redis>redis-server
+......
+[10512] 22 Mar 17:04:44.249 # Server started, Redis version 3.2.100
+[10512] 22 Mar 17:04:44.252 * DB loaded from disk: 0.001 seconds
+[10512] 22 Mar 17:04:44.253 * The server is now ready to accept connections on port 6379
+```
+
+2.打开终端，运行`redis-cli`，启动redis**客户端**
+``` 
+D:\Program Files\Redis>redis-cli
+127.0.0.1:6379> PING
+PONG
+127.0.0.1:6379>
+```
+
+3.配置redis**客户端**。配置文件位于安装目录下，文件名`redis.windows.conf`。
+- 查看或设置配置项：
+```
+D:\Program Files\Redis>redis-cli
+127.0.0.1:6379> CONFIG GET *
+  1) "dbfilename"
+  2) "dump.rdb"
+  ......
+  
+127.0.0.1:6379> CONFIG GET dbfilename
+  1) "dbfilename"
+  2) "dump.rdb"
+
+127.0.0.1:6379> CONFIG SET dbfilename 'test.rdb'
+OK
+127.0.0.1:6379> CONFIG GET dbfilename
+1) "dbfilename"
+2) "test.rdb"  
+```
+
+4.管理redis值
+
+- 键-值永久储存，只有通过确切的键才能获得相应的值，每个命令都是原子操作
+    - 设置键server:name的值为fido,然后获取值
+    - DEL删除键及值，INCR自动增加键对应的值，SETNX设置不存在的键值对
+    - EXPIRE确定键值对的存在时间，单位秒；TTL查看可存活时间
+```
+SET server:name "fido"
+GET server:name
+
+SETNX connections 100
+INCR connections
+DEL connections
+
+EXPIRE connections 30
+TTL connections
+```
+
+- 操作列表
+```
+# 左或右插入项
+RPUSH friends “ALICE”
+LPUSH friends “MIKE”
+
+# 长度
+LLEN friends
+
+# 切片
+LRANGE friends 0 1
+
+# 去除列表项并返回其值
+LPOP friends
+RPOP friends
+```
+
+- 操作set，项无序且唯一
+```
+# 添加特定值
+SADD superpowers "flight"
+SADD superpowers "reflexes"
+
+# 除去特定值
+SREM superpowers "flight"
+
+# 是否在集合内
+SISMEMBER superpowers "flights"
+
+# 返回集合元素列表
+SMEMBERS superpowers
+
+# 连接两个集合，返回所有元素组成的列表
+SADD birdpowers "pecking"
+SUNION superpowers birdpowers
+```
+
+- 有序集合
+```
+# 以数字(如，年龄）来排序
+ZADD hackers 1989 "YangBin"
+ZADD hackers 1990 "Yanghaha"
+ZADD hackers 1912 "Alan Turing"
+
+# 切片
+ZRANGE hackers 0 2
+```
+
+- Hash值
+```
+# 一个拥有名字、邮箱、密码等多个字段的用户
+HSET user:1000 name "John Smith"
+HSET user:1000 email "john.smith@example.com"
+HSET user:1000 password "s3cret"
+
+# 获取单个字段或所有信息
+HGET user：1000 email
+HGETALL user：1000
+
+# 同时设置多个字段
+HMSET user:1001 name "Mary Jones" password "hidden" email "mjones@example.com"
+
+# 操作数值型字段，设置、增加、删除
+HSET user:1000 visits 10
+HINCRBY user:1000 visits 5
+HDEL user:1000 visits
+```
+
+5.python中使用redis
+- 安装redis模块：`pip install redis`
+- 也必须命令行先开启redis服务器：`D:\path\to\Redis>redis-server`
+``` 
+>>> r=redis.Redis(host='127.0.0.1',port=3679,password='123456')
+>>> r.set('foo','bar')
+True
+>>> r.get('foo')
+b'bar'
+```
+
+6.flask中redis的使用：
+
+
+

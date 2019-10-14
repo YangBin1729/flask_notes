@@ -1,0 +1,12 @@
+#### 405 Method Not Allowed 
+1. 错误解析 - 表明服务器禁用了当前HTTP方法的请求
+2. 错误案列 - 路由中未指明`methods=['PSOT']`,但视图函数中使用了表单(包含`SubmitField`)并判断提交
+```
+@app.route('/', methods=['GET'])
+def index():
+    form = NameForm()
+    if form.validate_on_submit():
+        ......
+        return redirect(url_for('index'))
+    return render_template('index.html')
+```

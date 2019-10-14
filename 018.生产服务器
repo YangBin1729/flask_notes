@@ -1,0 +1,33 @@
+#### Python的Web框架自带Web服务器的目的是用于开发，而不是生产环境
+    - 如`werkzeug`模块的简单服务器：`from werkzeug.serving import run_simple`
+    - WSGI标准规定了一种在Web服务器与Web应用程序/框架之间推荐的标准接口，以确保Web应用程序在不同的Web服务器之间具有可移植性。
+
+#### 常见的WSGI容器：Gunicorn
+1.最简单的应用`app.py`:
+```
+from flask import Flask
+app=Flask(__name__)
+
+@app.route('/')
+def hello_world():
+    return 'Hello World!'
+    
+if __name__ == '__main__':
+    app.run(host='0.0.0.0', port=9000    
+```
+2.启动应用：
+```
+> gunicorn --workers=3 myweb.app:app-b 0.0.0.0:90000
+```
+
+- worker的数量是CPU个数*2+1，`import multiprocessing;multiprocessing.cpu_count()`;虚拟机通常只有1个CPU
+- `myweb`为模块目录名称，第一个`app`为模块文件名，第二个`app`为文件中Flask实例名
+
+
+#### uWSGI 
+1.启动应用：
+``` 
+> uwsgi --http 0.0.0.0:9000 --wsgi-file myweb/app.py --callable app --processes 4 --threads 2 --stats 0.0.0.0:5000
+```
+- 启动4个进程，每个进程使用两个线程，开启了5000的Web接口，返回监控的uWSGI的信息，以及不同进程和线程的详细使用情况
+

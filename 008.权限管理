@@ -1,0 +1,133 @@
+1.创建角色模型
+````
+class Role(db.Model):
+    __tablenames__ = 'roles'
+    id = db.Column(db.Integer)
+    name = db.Column(db.String(64), unique=True)
+    default = db.Column(db.Boolean, default=False, index=True)
+    permissions = db.Column(db.Integer)
+    users = db.relationship('User', backref='role', lazy='dynamic')
+
+    def __init__(self, **kwargs):
+        super(Role, self).__init__(**kwargs)
+        if self.permissions is None:    # 初始化权限
+            self.permissions = 0
+````
+
+2.不同的权限常量:关注、评论、写等
+````
+class Permission:   # TODO：每种权限对应的数值有讲究！！与下面的权限管理方法的加、减、按位与操作相关联
+    FOLLOW = 1
+    COMMENT = 2
+    WRITE = 4
+    MODERATE = 8
+    ADMIN = 16
+````
+
+3.权限管理方法
+````
+class Role(db.Model):
+    ...
+    def add_permission(self, perm):
+        if not self.has_permission(perm):
+            self.permissions += perm
+    def remove_permission(self, perm):
+        if self.has_permission(perm):
+            self.permissions -= perm
+    def reset_permission(self):
+        self.permissions = 0
+    def has_permission(self, perm):
+        return self.permissions&perm == perm
+````
+4.验证模型
+````
+(venv)$ flask shell
+>>> r = Role(name='User')
+>>> r.add_permission(Permission.FOLLOW)
+>>> r.add_permission(Permission.WRITE)
+>>> r.has_permission(Permission.FOLLOW)
+True
+>>> r.has_permission(Permission.ADMIN)
+False
+>>> r.reset_permissions()
+>>> r.has_permission(Permission.FOLLOW)
+False
+````
+
+5.创建用户角色
+````
+class Role(db.Model):
+    ...
+    @staticmethod
+    def insert_roles():
+        roles = {
+            'User': [Permission.FOLLOW, Permission.COMMENT, Permission.WRITE],
+            'Moderator': [Permission.FOLLOW, Permission.COMMENT, Permission.WRITE, Permission.MODERATE],
+            'Administrator':  [Permission.FOLLOW, Permission.COMMENT,
+                              Permission.WRITE, Permission.MODERATE,
+                              Permission.ADMIN]
+        }
+        default_role = 'User'
+        for r in roles:
+            role = Role.query.filter_by(name=r).first()
+            if role is None:
+                role = Role(name=r)
+            role.reset_permission()
+            for perm in roles[r]:
+                role.add_permission(perm)
+            role.default = (role.name==default_role)
+            db.session.add(role)
+        db.session.commit()
+````
+
+6.管理员初始化
+````
+class User(UserMixin, db.Model):
+    ...
+    def __init__(self, **kwargs):
+        super(User, self).__init__(**kwargs)
+        if self.role is None:
+            if self.email == current_app.config['FLASK_ADMIN']:
+                self.role = Role.query.filter_by(name='Administrator').first()
+            if self.role is None:
+                self.role = Role.query.filter_by(default=True).first()
+````
+
+7.角色验证
+````
+from flask_login import UserMixin,AnonymousUserMixin
+
+class User(UserMixin, db.Model):
+    ...
+    def can(self, perm):
+        return self.role is not None and self.role.has_permission(perm)
+    def is_adminstrator(self):
+        return self.can(Permission.ADMIN)
+
+class AnonymousUser(AnonymousUserMixin):
+    def can(self, permissions):
+        return False
+    def is_administrator(self):
+        return False
+
+login_manager.anonymous_user = AnonymousUser
+````
+
+8.检查用户权限的自定义装饰器
+
+```
+def permission_required(permission):
+    def decorator(f):
+        @wraps(f)
+        def decorated_function(*args, **kwargs):
+            if not current_user.can(permission):
+                abort(403)
+            return f(*args, **kwargs)
+        return decorated_function
+    return decorator
+
+def admin_required(f):
+    return permission_required(Permission.ADMIN)(f)
+```
+
+

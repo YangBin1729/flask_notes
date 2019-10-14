@@ -1,0 +1,104 @@
+#### 一、Jinjia
+
+1.基本语法：
+- `{% ... %}`用于执行if语句、for循环或赋值等语句。
+- `{{ ... }}`向模板输出一个表达式的结果。
+- `{# ... #}`注释
+- `#  ... ##` Line Statements
+
+2.继承：基础模板通常定义了一个适合于所有的子模板的主体结构。
+
+- 基础模板`app/templates/layout.html`:
+```html
+<!DOCTYPE html>
+<html lang="en">
+    <head>
+        <title>{% block title %}{% endblock %}</title>
+    </head>
+    
+    <body>
+    {% block body %}
+        <h1>这个标题在双亲模板中定义</h1>
+    {% endblock %}
+    </body>
+</html>
+```
+子模板拓展基础模板并定义block里的内容：
+- 子模板`app/templates/index.html`:
+```html
+{% extends "layout.html" %}
+
+{% block title %}Hello world!{% endblock %}
+
+{% block body %}
+    {{ super() }}
+    <h2>这个标题在子模板中定义</h2>
+{% endblock %}
+```
+
+3.创建宏：将反复出现的代码片段抽象成宏，类似函数
+
+`app/templates/layout.html`:
+```html
+{% from "macros.html" import nav_link with context %}
+<!DOCTYPE html>
+<html lang="en">
+    <head>
+    {% block head %}
+        <title>我的应用</title>
+    {% endblock %}
+    </head>
+    
+    <body>
+        <ul class="nav-list">
+            {{ nav_link('home', 'Home') }}
+            {{ nav_link('about', 'About') }}
+            {{ nav_link('contact', 'Get in touch') }}
+        </ul>
+    {% block body %}
+    {% endblock %}
+    </body>
+</html>
+```
+- 调用宏`nav_link`，并传递参数，目标视图函数名和要展示的文本 
+- `import`语句加入了`with context`,使上下文变量可用；
+- 一些变量是显式传递过去的，比如`render_template("index.html",color="red")`;但还有些变量和函数是Flask自动加入到上下文的，比如request，g和session
+
+定义宏`app/templates/macros.html`:
+```
+{% macro nav_link(endpoint, text) %}
+{% if request.endpoint.endswith(endpoint) %}
+    <li class="active"><a href="{{ url_for(endpoint) }}">{{text}}</a></li>
+{% else %}
+    <li><a href="{{ url_for(endpoint) }}">{{text}}</a></li>
+{% endif %}
+{% endmacro %}
+```
+
+4.自定义过滤器
+
+`app/util/filters.py`:
+```
+from .. import app
+
+@app.template_filter()
+def caps(text):
+    return text.uppercase()
+```
+- 默认的过滤器名字就是函数名字，也可以传递名字参数给装饰器
+```
+@app.template_filter('make_caps')
+def caps(text):
+    return text.uppercase()
+```
+- 此时应调用`make_caps`，`{{ "Hello World!"|make_caps }}`
+- 在顶级__init__.py中import自定义的过滤器
+```
+# 确保app已经被初始化以免导致循环import
+from .util import filters
+```
+
+5.模板的使用：
+- 调用`render_termplate`函数，参数为模板文件的路径，默认当前文件夹为`/templates`
+- Flask-Bootstrap模板：`bootstrap=Bootstrap(app)`，HTML模板文件中使用语句`{% extends "bootstrap/base.html" %}`来
+扩展bootstrap模板,该模板文件位于 Flask-Bootstrap 安装目录中

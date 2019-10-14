@@ -1,0 +1,178 @@
+#### 路由的注册：
+- 装饰器模式：
+```
+@app.route('/hello')
+def index():
+    return "Hello,World"
+```
+- `add_url_rule()`方法：`app.add_url_rule('/hello', view_func=index)`
+    - 装饰器模式背后的也是使用该方法，源代码如下：
+    ```
+    def route(self, rule, **options):
+        def decorator(f):
+            endpoint = options.pop('endpoint', None)
+            self.add_url_rule(rule, endpoint, f, **options)
+            return f
+        return decorator
+    ```   
+    - 使用基于类的视图，即插视图时，只能使用该方法。 
+
+
+
+#### 路由尾部的斜杠：
+1. 路由末尾**没有斜杠**，不兼容终端**末尾有斜杠**的访问方式
+    - 当终端访问路径`http://localhost/about/`，终端得到 404 NOT FOUND 错误
+    ``` 
+    @app.route('/about')
+    def about():
+        return 'The about page'
+    ```
+2. 路由末尾**有斜杠**时
+    - 当终端访问`http://localhost/about`时，路径**没有斜杠**，浏览器会自动进行重定向
+    ``` 
+    @app.route('/about/')
+    def about():
+        return 'The about page'
+    ```
+    - flask运行界面会显示两次'GET'请求，第一次状态码308表示重定向
+    ```html
+    127.0.0.1 - - [04/Jun/2019 21:27:53] "GET /about HTTP/1.1" 308 -
+    127.0.0.1 - - [04/Jun/2019 21:27:53] "GET /about/ HTTP/1.1" 200 -
+    ```
+3. 重定向原理：保持URL唯一，涉及到搜索引擎优化。
+4. **问题**：
+    - 重定向背后的详细细节
+    - 没有斜杠的路由为什么不兼容有斜杠的访问方式？如何自己实现？
+
+
+
+#### 一、视图装饰器
+1. 认证：
+    - Flask-Login 的`@login_required`装饰器验证用户对某些资源的访问
+    - 只有已经验证的用户能够接触到`/dashboard`路由
+``` 
+from flask import render_template
+from flask_login import login_required, current_user
+
+@app.route('/')
+def index():
+    return render_template("index.html")
+
+@app.route('/dashboard')
+@login_required
+def account():
+    return render_template("account.html")
+```
+
+
+2. 缓存
+    - 应用场景：同一时刻处理大量的请求，每次请求都要重复操作数据库
+    - Flask-Cache 扩展
+    - index()函数每60秒将最多运行一次。响应的结果会被保存在缓存中，并可以让期间的每一个请求获取。
+```
+from flask_cache import Cache
+from flask import Flask
+
+app = Flask(__name__)
+cache = Cache(app)
+
+@app.route('/')
+@cache.cached(timeout=60)
+def index():
+    ...         # 进行数据库操作获取信息
+    return render_template('index.html',user=user) 
+```
+
+
+
+3.自定义装饰器：
+    - 示例：有一个应用，每个月要求用户定期付费。如果一个用户的账户已经过期，我们要重定向他们到账单页面
+    - 当用@check_expired装饰一个函数时，check_expired()被调用，被装饰的函数作为一个参数被传递进来。
+    - @wraps是一个装饰器，告知Python函数decorated_function()包装了视图函数func()。
+    - decorated_function将截取原本传递给视图函数func()的args和kwargs，检查账户是否过期。如果是，则闪烁一则信息，并重定向到账单页面。
+```
+from functools import wraps
+from datetime import datetime
+from flask import flash, redirect, url_for
+from flask_login import current_user
+
+def check_expired(func):
+    @wraps(func)
+    def decorated_function(*args, **kwargs):
+        if datetime.utcnow() > current_user.account_expires:
+            flash("Your account has expired. Please update your billing information.")
+            return redirect(url_for('account_billing'))
+        return func(*args, **kwargs)
+    return decorated_function
+
+```
+``` 
+@app.route('/use_app')
+@login_required
+@check_expired
+def use_app():
+    ...
+    return render_template('use_app.html')
+```
+
+#### 二、URL转换器
+1. 内建转换器
+    - 访问URL`http://myapp.com/user/tomato`时会返回一个404状态码，因为`tomato`处应为整数
+``` 
+@app.route('/user/<int:user_id>')
+def profile(user_id):
+    pass
+```
+- 常用转换器
+
+|类型|作用|
+|----|----|
+|string|接受任何没有斜杠`/`的文本（默认）|
+|int|整数| 
+|float|浮点数|
+|path|类似于string，但是接受斜杠`/`|
+
+2. 自定义转换器
+    - 示例： Reddit-用户在此可以创建和管理基于主题和链接分享的社区。比如/r/python和/r/flask，分别由URLreddit.com/r/python和reddit.com/r/flask表示。 
+    - 通过在URL中用一个+隔开各个社区名，你可以同时看到来自多个社区的帖子。比如reddit.com/r/python+flask
+    - `to_python()`用于转换路径成一个Python对象，并传递给视图函数。而`to_url()`被`url_for()`调用，来转换参数成为符合URL的形式。
+    - 为了使用的ListConverter，将其添加到`converters`词典中，其键名为`list`
+
+`util.py`:
+```
+from werkzeug.routing import BaseConverter
+
+class ListConverter(BaseConverter):
+    def to_python(self, value):
+        return value.split('+')
+
+    def to_url(self, values):
+        return '+'.join(BaseConverter.to_url(value)
+                        for value in values)
+```
+
+
+`app/__init__.py`:
+``` 
+from flask import Flask
+app = Flask(__name__)
+
+from .util import ListConverter
+app.url_map.converters['list'] = ListConverter
+```
+
+
+
+`views.py`:
+``` 
+from . import app
+
+@app.route('/r/<list:subreddits>')
+def subreddit_home(subreddits):
+    """显示给定subreddits里的所有帖子"""
+    posts = []
+    for subreddit in subreddits:
+        posts.extend(subreddit.posts)
+
+    return render_template('/r/index.html', posts=posts)
+```
